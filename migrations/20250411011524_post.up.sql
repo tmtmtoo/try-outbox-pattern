@@ -10,7 +10,7 @@ create table post (
 create table outbox (
     id bigserial primary key,
     topic text not null,
-    payload jsonb not null,
+    payload text not null,
     created_at timestamp default current_timestamp,
     processed_at timestamp
 );

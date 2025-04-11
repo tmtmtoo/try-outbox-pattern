@@ -1,13 +1,10 @@
 [package]
-name = "app"
+name = "event"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-sqlx = { workspace = true }
-tokio = { workspace = true }
-uuid = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-event = { path = "../event" }
+uuid = { workspace = true }
 chrono = { workspace = true }
