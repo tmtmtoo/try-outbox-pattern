@@ -1,0 +1,40 @@
+version: "3"
+services:
+  db:
+    image: postgres:15
+    restart: always
+    ports:
+      - 5432:5432
+    environment:
+      - POSTGRES_USER=dev
+      - POSTGRES_HOST_AUTH_METHOD=trust
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  migration:
+    build:
+      context: .
+      dockerfile: Dockerfile.migration
+    volumes:
+      - ./migrations:/app/migrations
+    environment:
+      - DATABASE_URL=postgres://dev@db:5432/dev
+    depends_on:
+      db:
+        condition: service_healthy
+
+  mq:
+    image: rabbitmq:3-management
+    restart: always
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      - RABBITMQ_DEFAULT_USER=dev
+      - RABBITMQ_DEFAULT_PASS=dev
+    volumes:
+      - ./rabbitmq-local/definitions.json:/etc/rabbitmq/definitions.json
+      - ./rabbitmq-local/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf

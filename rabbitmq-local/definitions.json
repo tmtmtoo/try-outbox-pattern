@@ -1,0 +1,30 @@
+{
+  "vhosts": [
+    {
+      "name": "/"
+    }
+  ],
+  "queues": [
+    {
+      "name": "my-queue",
+      "vhost": "/",
+      "durable": true
+    }
+  ],
+  "users": [
+    {
+      "name": "dev",
+      "password": "dev",
+      "tags": "administrator"
+    }
+  ],
+  "permissions": [
+    {
+      "user": "dev",
+      "vhost": "/",
+      "configure": ".*",
+      "write": ".*",
+      "read": ".*"
+    }
+  ]
+}
