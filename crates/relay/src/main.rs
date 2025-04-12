@@ -1,5 +1,3 @@
-use futures_util::TryStreamExt;
-
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let database_url = std::env::var("DATABASE_URL")?;
@@ -13,10 +11,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     listener.listen("outbox_channel").await?;
 
-    let mut stream = listener.into_stream();
+    let listener_stream = {
+        let stream = listener.into_stream();
+        futures_util::StreamExt::map(stream, |r| r.map(|_|()))
+    };
 
-    while let Ok(Some(_)) = stream.try_next().await {
-        let _ = process_outbox(&pool, 2).await;
+    let timer_stream = {
+        let duration = tokio::time::Duration::from_secs(5);
+        let interval = tokio::time::interval(duration);
+        let stream = tokio_stream::wrappers::IntervalStream::new(interval);
+        futures_util::StreamExt::map(stream, |_| Ok(()))
+    };
+
+    let mut combined_stream = tokio_stream::StreamExt::merge(listener_stream, timer_stream);
+
+    while let Ok(Some(_)) = futures_util::TryStreamExt::try_next(&mut combined_stream).await {
+        let _ = process_outbox(&pool).await;
     }
 
     Ok(())
@@ -30,8 +40,7 @@ struct Outbox {
 }
 
 async fn process_outbox(
-    pool: &sqlx::Pool<sqlx::Postgres>,
-    limit: u32,
+    pool: &sqlx::Pool<sqlx::Postgres>
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut tx = pool.begin().await?;
 
@@ -48,12 +57,9 @@ async fn process_outbox(
             processed_at is null
         order by
             created_at asc
-        limit
-            $1
         for update
             skip locked
-    "#,
-        i64::from(limit)
+    "#
     )
     .fetch_all(&mut *tx)
     .await?;
