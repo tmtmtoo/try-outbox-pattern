@@ -28,13 +28,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             where
                 processed_at is null
             order by
-                created_at asc                
+                created_at asc
+            for update skip locked          
         "#
         )
         .fetch_all(&pool)
         .await
         {
-            Ok(list) => {}
+            Ok(list) => {
+                dbg!(&list);
+            }
             Err(_) => continue,
         }
     }
