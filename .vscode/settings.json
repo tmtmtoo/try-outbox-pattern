@@ -1,0 +1,5 @@
+{
+    "terminal.integrated.env.linux": {
+        "DATABASE_URL": "postgres://dev@localhost:5432/dev",
+    }
+}
