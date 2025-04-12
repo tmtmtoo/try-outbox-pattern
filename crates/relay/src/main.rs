@@ -16,7 +16,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut stream = listener.into_stream();
 
     while let Ok(Some(_)) = stream.try_next().await {
-        let _ = process(&pool).await;
+        let _ = process_outbox(&pool, 2).await;
     }
 
     Ok(())
@@ -29,7 +29,10 @@ struct Outbox {
     payload: String,
 }
 
-async fn process(pool: &sqlx::Pool<sqlx::Postgres>) -> Result<(), Box<dyn std::error::Error>> {
+async fn process_outbox(
+    pool: &sqlx::Pool<sqlx::Postgres>,
+    limit: u32,
+) -> Result<(), Box<dyn std::error::Error>> {
     let mut tx = pool.begin().await?;
 
     let list = sqlx::query_as!(
@@ -45,9 +48,12 @@ async fn process(pool: &sqlx::Pool<sqlx::Postgres>) -> Result<(), Box<dyn std::e
             processed_at is null
         order by
             created_at asc
+        limit
+            $1
         for update
             skip locked
-    "#
+    "#,
+        i64::from(limit)
     )
     .fetch_all(&mut *tx)
     .await?;
