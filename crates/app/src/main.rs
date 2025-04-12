@@ -19,9 +19,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
 
     sqlx::query("insert into outbox (topic, payload, created_at) values ($1, $2, $3)")
-        .bind(event.topic.to_string())
-        .bind(event.payload_string()?)
-        .bind(event.created_at)
+        .bind(event.topic())
+        .bind(event.payload())
+        .bind(event.created_at())
         .execute(&mut *tx)
         .await?;
 
@@ -39,17 +39,7 @@ struct Post<'a> {
 fn post<'a>(title: &'a str, content: &'a str) -> (Post<'a>, event::Event<event::Posted>) {
     let id = uuid::Uuid::new_v4();
     let now = chrono::Utc::now().naive_utc();
-
-    let event = event::Event {
-        topic: event::Topic::Post,
-        payload: event::Posted {
-            id: id.clone(),
-            title: title.to_string(),
-            posted_at: now.clone(),
-        },
-        created_at: now,
-    };
-
+    let event = event::Event::new(event::Posted { id: id.clone(), title: title.into() },  now);
     let post = Post { id, title, content };
 
     (post, event)

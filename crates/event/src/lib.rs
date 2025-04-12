@@ -1,35 +1,38 @@
-#[derive(serde::Serialize, serde::Deserialize)]
-pub enum Topic {
-    Post,
+pub trait Topic {
+    fn topic<'a>(&self) -> &'a str;
 }
 
-impl std::fmt::Display for Topic {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Topic::Post => write!(f, "post"),
-        }
+pub struct Event<Payload>
+{
+    payload: Payload,
+    created_at: chrono::NaiveDateTime,
+}
+
+impl<Payload> Event<Payload>
+where
+    Payload: std::fmt::Display,
+{
+    pub fn payload(&self) -> String {
+        self.payload.to_string()
     }
 }
 
-pub trait TryIntoPayloadString {
-    fn try_into_payload_string(&self) -> Result<String, Box<dyn std::error::Error>>;
+impl<Payload> Event<Payload> 
+where
+    Payload: Topic
+{
+    pub fn topic<'a>(&'a self) -> &'a str {
+        self.payload.topic()
+    }
 }
 
-pub struct Event<T>
-where
-    T: TryIntoPayloadString,
-{
-    pub topic: Topic,
-    pub payload: T,
-    pub created_at: chrono::NaiveDateTime,
-}
+impl<Payload> Event<Payload> {
+    pub fn new(payload: Payload, created_at: chrono::NaiveDateTime) -> Self {
+        Self { payload, created_at }
+    }
 
-impl<T> Event<T>
-where
-    T: TryIntoPayloadString,
-{
-    pub fn payload_string(&self) -> Result<String, Box<dyn std::error::Error>> {
-        self.payload.try_into_payload_string()
+    pub fn created_at<'a>(&'a self) -> &'a chrono::NaiveDateTime {
+        &self.created_at
     }
 }
 
@@ -37,12 +40,17 @@ where
 pub struct Posted {
     pub id: uuid::Uuid,
     pub title: String,
-    pub posted_at: chrono::NaiveDateTime,
 }
 
-impl TryIntoPayloadString for Posted {
-    fn try_into_payload_string(&self) -> Result<String, Box<dyn std::error::Error>> {
-        let payload = serde_json::to_string(self)?;
-        Ok(payload)
+impl std::fmt::Display for Posted {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
+}
+
+impl Topic for Posted {
+    fn topic<'a>(&self) -> &'a str {
+        "post"
     }
 }
