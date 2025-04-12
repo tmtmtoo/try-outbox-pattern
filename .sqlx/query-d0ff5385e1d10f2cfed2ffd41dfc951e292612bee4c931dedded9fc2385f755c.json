@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            select\n                id,\n                topic,\n                payload\n            from\n                outbox\n            where\n                processed_at is null\n            order by\n                created_at asc\n            for update skip locked          \n        ",
+  "query": "\n        select\n            id,\n            topic,\n            payload\n        from\n            outbox\n        where\n            processed_at is null\n        order by\n            created_at asc\n        for update\n            skip locked\n    ",
   "describe": {
     "columns": [
       {
@@ -28,5 +28,5 @@
       false
     ]
   },
-  "hash": "ea68f4c9323644f1bab5a081780fd0f808078f0c61392eca9fbfa22948eef2d3"
+  "hash": "d0ff5385e1d10f2cfed2ffd41dfc951e292612bee4c931dedded9fc2385f755c"
 }
