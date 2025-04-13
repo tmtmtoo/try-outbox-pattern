@@ -6,7 +6,7 @@
   ],
   "queues": [
     {
-      "name": "my-queue",
+      "name": "post",
       "vhost": "/",
       "durable": true
     }
