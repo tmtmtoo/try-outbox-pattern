@@ -51,9 +51,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     outbox.payload.as_bytes(),
                     lapin::BasicProperties::default(),
                 )
-                .await?;
-
-            Ok(())
+                .await
+                .map(|_| ())
+                .map_err(Into::into)
         })
         .await?;
     }
