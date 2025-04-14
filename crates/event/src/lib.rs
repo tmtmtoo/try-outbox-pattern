@@ -2,8 +2,7 @@ pub trait Topic {
     fn topic<'a>(&self) -> &'a str;
 }
 
-pub struct Event<Payload>
-{
+pub struct Event<Payload> {
     payload: Payload,
     created_at: chrono::NaiveDateTime,
 }
@@ -17,9 +16,9 @@ where
     }
 }
 
-impl<Payload> Event<Payload> 
+impl<Payload> Event<Payload>
 where
-    Payload: Topic
+    Payload: Topic,
 {
     pub fn topic<'a>(&'a self) -> &'a str {
         self.payload.topic()
@@ -28,7 +27,10 @@ where
 
 impl<Payload> Event<Payload> {
     pub fn new(payload: Payload, created_at: chrono::NaiveDateTime) -> Self {
-        Self { payload, created_at }
+        Self {
+            payload,
+            created_at,
+        }
     }
 
     pub fn created_at<'a>(&'a self) -> &'a chrono::NaiveDateTime {
