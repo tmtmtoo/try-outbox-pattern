@@ -43,8 +43,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     use futures_util::TryStreamExt;
     while let Ok(Some(_)) = outbox_handle_stream.try_next().await {
         process_outbox(&pg_pool, async |outbox| {
-            println!("Processing outbox message: {:?}", outbox);
-
             amqp_channel
                 .basic_publish(
                     "",
