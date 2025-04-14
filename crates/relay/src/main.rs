@@ -96,16 +96,23 @@ async fn process_outbox(
     .fetch_all(&mut *tx)
     .await?;
 
-    for outbox in list {
-        handler(&outbox).await?;
+    let mut processed_outbox_ids = Vec::with_capacity(list.len());
 
+    for outbox in list {
+        match handler(&outbox).await {
+            Ok(_) => processed_outbox_ids.push(outbox.id),
+            _ => {}
+        }
+    }
+
+    if !processed_outbox_ids.is_empty() {
         sqlx::query!(
             r#"
-            update outbox
-            set processed_at = now()
-            where id = $1
-        "#,
-            outbox.id
+                update outbox
+                set processed_at = now()
+                where id = any($1)
+            "#,
+            &processed_outbox_ids
         )
         .execute(&mut *tx)
         .await?;
