@@ -74,7 +74,7 @@ async fn process_outbox(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut tx = pool.begin().await?;
 
-    let list = sqlx::query_as!(
+    let outboxes = sqlx::query_as!(
         OutboxMessage,
         r#"
         select
@@ -94,12 +94,11 @@ async fn process_outbox(
     .fetch_all(&mut *tx)
     .await?;
 
-    let mut processed_outbox_ids = Vec::with_capacity(list.len());
+    let mut processed_outbox_ids = Vec::with_capacity(outboxes.len());
 
-    for outbox in list {
-        match handler(&outbox).await {
-            Ok(_) => processed_outbox_ids.push(outbox.id),
-            _ => {}
+    for outbox in outboxes {
+        if let Ok(_) = handler(&outbox).await {
+            processed_outbox_ids.push(outbox.id);
         }
     }
 
