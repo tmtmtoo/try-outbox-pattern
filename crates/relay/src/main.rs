@@ -35,10 +35,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         stream.map(|_| Ok(()))
     };
 
-    let mut outbox_handle_stream = {
+    let  outbox_handle_stream = {
         use tokio_stream::StreamExt;
-        pg_listener_stream.merge(timer_stream)
+        pg_listener_stream.merge(timer_stream).throttle(tokio::time::Duration::from_millis(100))
     };
+
+    tokio::pin!( outbox_handle_stream);
 
     use futures_util::TryStreamExt;
     while let Ok(Some(_)) = outbox_handle_stream.try_next().await {
