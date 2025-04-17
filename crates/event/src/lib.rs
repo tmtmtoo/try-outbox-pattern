@@ -1,5 +1,9 @@
+pub mod topic {
+    pub const POST: &'static str = "post";
+}
+
 pub trait Topic {
-    fn topic<'a>(&self) -> &'a str;
+    fn topic(&self) -> &'static str;
 }
 
 pub struct Event<Payload> {
@@ -38,7 +42,7 @@ impl<Payload> Event<Payload> {
     }
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct Posted {
     pub id: uuid::Uuid,
     pub title: String,
@@ -52,7 +56,7 @@ impl std::fmt::Display for Posted {
 }
 
 impl Topic for Posted {
-    fn topic<'a>(&self) -> &'a str {
-        "post"
+    fn topic(&self) -> &'static str {
+        topic::POST
     }
 }

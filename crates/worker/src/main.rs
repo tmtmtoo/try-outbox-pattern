@@ -9,15 +9,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         conn.create_channel().await?
     };
 
-    let worker_tag = {
-        let random = rand::random_range(0..1000);
-        format!("worker-{random:03}")
-    };
-
     let mut stream = amqp_channel
         .basic_consume(
-            "post",
-            &worker_tag,
+            event::topic::POST,
+            env!("CARGO_PKG_NAME"),
             lapin::options::BasicConsumeOptions {
                 no_ack: false,
                 ..Default::default()
@@ -29,7 +24,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     use futures_util::stream::TryStreamExt;
     while let Some(message) = stream.try_next().await? {
         let data = String::from_utf8_lossy(&message.data);
-        println!("Received message: {data}");
+        let posted = serde_json::from_str::<event::Posted>(&data)?;
+        println!("Received message: {posted:?}");
 
         let timeout_duration = tokio::time::Duration::from_secs(5);
         let result = tokio::time::timeout(
