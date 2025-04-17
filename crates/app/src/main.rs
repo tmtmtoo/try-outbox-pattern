@@ -5,6 +5,8 @@ struct Config {
     app_posts: u32,
 }
 
+// todo: 設定としてrpsを持ち、その頻度に応じてpostを行う
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = envy::from_env::<Config>()?;
@@ -15,15 +17,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await
         .map(std::sync::Arc::new)?;
 
+    let mut handles = Vec::with_capacity(config.app_posts as usize);
+
     for _ in 0..config.app_posts {
         let pool = pool.clone();
-        tokio::spawn(async move {
+        let handle = tokio::spawn(async move {
             let (post, event) = post("Hello, world!", "This is my post.");
             if let Err(e) = insert_post(&pool, &post, &event).await {
                 eprintln!("Failed to insert post: {e}");
             }
         });
+        handles.push(handle);
     }
+
+    futures_util::future::try_join_all(handles).await?;
 
     Ok(())
 }

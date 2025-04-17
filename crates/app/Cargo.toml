@@ -12,3 +12,4 @@ serde_json = { workspace = true }
 event = { path = "../event" }
 chrono = { workspace = true }
 envy = { workspace = true }
+futures-util = { workspace = true }
