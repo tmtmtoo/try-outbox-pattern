@@ -1,27 +1,21 @@
 #[derive(Debug, serde::Deserialize)]
 struct Config {
     database_url: String,
-    connection_count: u32,
-    post_count: u32,
-}
-
-impl Config {
-    fn from_env() -> Result<Self, Box<dyn std::error::Error>> {
-        envy::from_env().map_err(Into::into)
-    }
+    app_database_max_connections: u32,
+    app_posts: u32,
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let config = Config::from_env()?;
+    let config = envy::from_env::<Config>()?;
 
     let pool = sqlx::postgres::PgPoolOptions::new()
-        .max_connections(config.connection_count)
+        .max_connections(config.app_database_max_connections)
         .connect(&config.database_url)
         .await
         .map(std::sync::Arc::new)?;
 
-    for _ in 0..config.post_count {
+    for _ in 0..config.app_posts {
         let pool = pool.clone();
         tokio::spawn(async move {
             let (post, event) = post("Hello, world!", "This is my post.");
