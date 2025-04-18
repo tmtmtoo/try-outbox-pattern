@@ -37,12 +37,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     while let Some(_) = timer.next().await {
         let pool = pool.clone();
-        let handle = tokio::spawn(async move {
+        let task = async move {
             let (post, event) = post("Hello, world!", "This is my post.");
             if let Err(e) = insert_post(&pool, &post, &event).await {
                 eprintln!("Failed to insert post: {e}");
             }
-        });
+        };
+        let handle = tokio::spawn(task);
         handles.push(handle);
     }
 
