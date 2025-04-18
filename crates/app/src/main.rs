@@ -1,5 +1,3 @@
-use serde::de;
-
 #[derive(Debug, serde::Deserialize)]
 struct Config {
     database_url: String,
@@ -21,21 +19,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map(std::sync::Arc::new)?;
 
     let ticker = {
-        let duration = 1.0 / config.app_post_rps as f64;
+        let duration = 1.0 / f64::from(config.app_post_rps);
         let duration = tokio::time::Duration::from_secs_f64(duration);
         let interval = tokio::time::interval(duration);
         tokio_stream::wrappers::IntervalStream::new(interval)
     };
 
-    let deadline = tokio::time::sleep(tokio::time::Duration::from_secs(
-        config.app_post_duration_secs.into(),
-    ));
-    tokio::pin!(deadline);
+    let deadline = {
+        let duration = f64::from(config.app_post_duration_secs);
+        let duration = tokio::time::Duration::from_secs_f64(duration);
+        tokio::time::sleep(duration)
+    };
 
+    tokio::pin!(deadline);
     let mut timed_ticker = ticker.take_until(&mut deadline);
 
-    let capacity = config.app_post_rps * config.app_post_duration_secs;
-    let mut handles = Vec::with_capacity(capacity as usize);
+    let mut handles = {
+        let capacity = config.app_post_rps * config.app_post_duration_secs;
+        Vec::with_capacity(capacity as usize)
+    };
 
     while let Some(_) = timed_ticker.next().await {
         let pool = pool.clone();
