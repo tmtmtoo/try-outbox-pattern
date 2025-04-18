@@ -2,13 +2,14 @@
 struct Config {
     database_url: String,
     app_database_max_connections: u32,
-    app_posts: u32,
+    app_post_rps: u32,
+    app_post_duration_secs: u32,
 }
-
-// todo: 設定としてrpsを持ち、その頻度に応じてpostを行う
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    use futures_util::StreamExt;
+
     let config = envy::from_env::<Config>()?;
 
     let pool = sqlx::postgres::PgPoolOptions::new()
@@ -17,9 +18,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await
         .map(std::sync::Arc::new)?;
 
-    let mut handles = Vec::with_capacity(config.app_posts as usize);
+    let ticker = {
+        let duration = 1.0 / config.app_post_rps as f64;
+        let duration = tokio::time::Duration::from_secs_f64(duration);
+        let interval = tokio::time::interval(duration);
+        let stream = tokio_stream::wrappers::IntervalStream::new(interval);
+        stream.map(|_| ())
+    };
 
-    for _ in 0..config.app_posts {
+    let stopper = tokio::time::sleep(tokio::time::Duration::from_secs(
+        config.app_post_duration_secs.into(),
+    ));
+
+    tokio::pin!(stopper);
+
+    let capacity = config.app_post_rps * config.app_post_duration_secs;
+    let mut handles = Vec::with_capacity(capacity as usize);
+
+    let mut timer = ticker.take_until(&mut stopper);
+
+    while let Some(_) = timer.next().await {
         let pool = pool.clone();
         let handle = tokio::spawn(async move {
             let (post, event) = post("Hello, world!", "This is my post.");

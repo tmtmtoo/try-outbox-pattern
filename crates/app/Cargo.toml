@@ -13,3 +13,4 @@ event = { path = "../event" }
 chrono = { workspace = true }
 envy = { workspace = true }
 futures-util = { workspace = true }
+tokio-stream = { version = "*" }
