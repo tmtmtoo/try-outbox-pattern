@@ -22,20 +22,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let duration = 1.0 / config.app_post_rps as f64;
         let duration = tokio::time::Duration::from_secs_f64(duration);
         let interval = tokio::time::interval(duration);
-        let stream = tokio_stream::wrappers::IntervalStream::new(interval);
-        stream.map(|_| ())
+        tokio_stream::wrappers::IntervalStream::new(interval)
     };
 
     let stopper = tokio::time::sleep(tokio::time::Duration::from_secs(
         config.app_post_duration_secs.into(),
     ));
-
     tokio::pin!(stopper);
+
+    let mut timer = ticker.take_until(&mut stopper);
 
     let capacity = config.app_post_rps * config.app_post_duration_secs;
     let mut handles = Vec::with_capacity(capacity as usize);
-
-    let mut timer = ticker.take_until(&mut stopper);
 
     while let Some(_) = timer.next().await {
         let pool = pool.clone();
