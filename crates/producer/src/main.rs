@@ -1,9 +1,9 @@
 #[derive(Debug, serde::Deserialize)]
 struct Config {
     database_url: String,
-    app_database_max_connections: u32,
-    app_post_rps: u32,
-    app_post_duration_secs: u32,
+    producer_database_max_connections: u32,
+    producer_rps: u32,
+    producer_duration_secs: u32,
 }
 
 #[tokio::main]
@@ -13,20 +13,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = envy::from_env::<Config>()?;
 
     let pool = sqlx::postgres::PgPoolOptions::new()
-        .max_connections(config.app_database_max_connections)
+        .max_connections(config.producer_database_max_connections)
         .connect(&config.database_url)
         .await
         .map(std::sync::Arc::new)?;
 
     let ticker = {
-        let duration = 1.0 / f64::from(config.app_post_rps);
+        let duration = 1.0 / f64::from(config.producer_rps);
         let duration = tokio::time::Duration::from_secs_f64(duration);
         let interval = tokio::time::interval(duration);
         tokio_stream::wrappers::IntervalStream::new(interval)
     };
 
     let deadline = {
-        let duration = f64::from(config.app_post_duration_secs);
+        let duration = f64::from(config.producer_duration_secs);
         let duration = tokio::time::Duration::from_secs_f64(duration);
         tokio::time::sleep(duration)
     };
@@ -35,7 +35,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut timed_ticker = ticker.take_until(&mut deadline);
 
     let mut handles = {
-        let capacity = config.app_post_rps * config.app_post_duration_secs;
+        let capacity = config.producer_rps * config.producer_duration_secs;
         Vec::with_capacity(capacity as usize)
     };
 
