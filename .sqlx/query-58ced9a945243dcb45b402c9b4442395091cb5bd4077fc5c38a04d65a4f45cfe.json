@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                select\n                    id,\n                    topic,\n                    payload\n                from\n                    outbox\n                where\n                    processed_at is null\n                order by\n                    created_at asc\n                limit\n                    $1\n                for update\n                    skip locked\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "topic",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "payload",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "58ced9a945243dcb45b402c9b4442395091cb5bd4077fc5c38a04d65a4f45cfe"
+}

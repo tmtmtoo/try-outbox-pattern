@@ -1,19 +1,27 @@
+#[derive(Debug, serde::Deserialize)]
+struct Config {
+    amqp_url: String,
+    database_url: String,
+    relay_throttle_millis: u32,
+    relay_query_limit: Option<u32>,
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let config = envy::from_env::<Config>()?;
+
     let amqp_channel = {
-        let amqp_url = std::env::var("AMQP_URL")?;
         let options = lapin::ConnectionProperties::default()
             .with_executor(tokio_executor_trait::Tokio::current())
             .with_reactor(tokio_reactor_trait::Tokio);
-        let conn = lapin::Connection::connect(&amqp_url, options).await?;
+        let conn = lapin::Connection::connect(&config.amqp_url, options).await?;
         conn.create_channel().await?
     };
 
     let pg_pool = {
-        let database_url = std::env::var("DATABASE_URL")?;
         sqlx::postgres::PgPoolOptions::new()
             .max_connections(2)
-            .connect(&database_url)
+            .connect(&config.database_url)
             .await?
     };
 
@@ -22,37 +30,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         listener.listen("outbox_channel").await?;
         let stream = listener.into_stream();
 
-        use futures_util::stream::StreamExt;
-        stream.map(|r| r.map(|_| ()))
-    };
-
-    let timer_stream = {
-        let duration = tokio::time::Duration::from_secs(5);
-        let interval = tokio::time::interval(duration);
-        let stream = tokio_stream::wrappers::IntervalStream::new(interval);
-
-        use futures_util::stream::StreamExt;
-        stream.map(|_| Ok(()))
-    };
-
-    let outbox_handle_stream = {
         use tokio_stream::StreamExt;
-        pg_listener_stream
-            .merge(timer_stream)
-            .throttle(tokio::time::Duration::from_millis(100))
+        stream.throttle(tokio::time::Duration::from_millis(
+            config.relay_throttle_millis.into(),
+        ))
     };
-
-    tokio::pin!(outbox_handle_stream);
+    tokio::pin!(pg_listener_stream);
 
     use futures_util::TryStreamExt;
-    while let Ok(Some(_)) = outbox_handle_stream.try_next().await {
-        process_outbox(&pg_pool, async |outbox| {
+    while let Ok(Some(_)) = pg_listener_stream.try_next().await {
+        process_outbox(&pg_pool, config.relay_query_limit, async |message| {
             amqp_channel
                 .basic_publish(
                     "",
-                    &outbox.topic,
+                    &message.topic,
                     lapin::options::BasicPublishOptions::default(),
-                    outbox.payload.as_bytes(),
+                    message.payload.as_bytes(),
                     lapin::BasicProperties::default(),
                 )
                 .await
@@ -74,52 +67,89 @@ struct OutboxMessage {
 
 async fn process_outbox(
     pool: &sqlx::Pool<sqlx::Postgres>,
+    query_limit: Option<u32>,
     handler: impl AsyncFn(&OutboxMessage) -> Result<(), Box<dyn std::error::Error>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut tx = pool.begin().await?;
+    loop {
+        let mut tx = pool.begin().await?;
 
-    let outboxes = sqlx::query_as!(
-        OutboxMessage,
-        r#"
-        select
-            id,
-            topic,
-            payload
-        from
-            outbox
-        where
-            processed_at is null
-        order by
-            created_at asc
-        for update
-            skip locked
-    "#
-    )
-    .fetch_all(&mut *tx)
-    .await?;
+        let messages = match query_limit {
+            Some(limit) => {
+                sqlx::query_as!(
+                    OutboxMessage,
+                    r#"
+                select
+                    id,
+                    topic,
+                    payload
+                from
+                    outbox
+                where
+                    processed_at is null
+                order by
+                    created_at asc
+                limit
+                    $1
+                for update
+                    skip locked
+            "#,
+                    limit as i64
+                )
+                .fetch_all(&mut *tx)
+                .await?
+            }
+            None => {
+                sqlx::query_as!(
+                    OutboxMessage,
+                    r#"
+                select
+                    id,
+                    topic,
+                    payload
+                from
+                    outbox
+                where
+                    processed_at is null
+                order by
+                    created_at asc
+                for update
+                    skip locked
+            "#
+                )
+                .fetch_all(&mut *tx)
+                .await?
+            }
+        };
 
-    let mut processed_outbox_ids = Vec::with_capacity(outboxes.len());
+        let mut processed_outbox_ids = Vec::with_capacity(messages.len());
 
-    for outbox in outboxes {
-        if let Ok(_) = handler(&outbox).await {
-            processed_outbox_ids.push(outbox.id);
+        for message in &messages {
+            if let Ok(_) = handler(message).await {
+                processed_outbox_ids.push(message.id);
+            }
         }
-    }
 
-    if !processed_outbox_ids.is_empty() {
-        sqlx::query!(
-            r#"
+        if !processed_outbox_ids.is_empty() {
+            sqlx::query!(
+                r#"
                 update outbox
                 set processed_at = now()
                 where id = any($1)
             "#,
-            &processed_outbox_ids
-        )
-        .execute(&mut *tx)
-        .await?;
-    }
+                &processed_outbox_ids
+            )
+            .execute(&mut *tx)
+            .await?;
+        }
 
-    tx.commit().await?;
+        tx.commit().await?;
+
+        match (query_limit, messages.len()) {
+            (Some(limit), len) if len < limit as usize => break,
+            (None, _) => break,
+            _ => continue,
+        }
+    }
 
     Ok(())
 }

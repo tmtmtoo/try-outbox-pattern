@@ -14,3 +14,4 @@ tokio-stream = { version = "*" }
 lapin = { workspace = true }
 tokio-executor-trait = { workspace = true }
 tokio-reactor-trait = { workspace = true }
+envy = { workspace = true }
