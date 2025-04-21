@@ -17,7 +17,7 @@ services:
   migration:
     build:
       context: .
-      dockerfile: Dockerfile.migration
+      dockerfile: migration.dockerfile
     volumes:
       - ./migrations:/app/migrations
     environment:
