@@ -15,6 +15,8 @@ create table outbox (
     processed_at timestamp
 );
 
+create index idx_outbox_processed_created on outbox (processed_at, created_at);
+
 create or replace function notify_outbox_event()
 returns trigger as $$
 begin
