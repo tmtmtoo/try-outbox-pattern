@@ -39,12 +39,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Vec::with_capacity(capacity as usize)
     };
 
+    let counter = {
+        let atom = std::sync::atomic::AtomicUsize::new(0);
+        std::sync::Arc::new(atom)
+    };
+
     while let Some(_) = timed_ticker.next().await {
         let pool = pool.clone();
+        let counter = counter.clone();
         let task = async move {
-            let (post, event) = post("Hello, world!", "This is my post.");
+            let count = counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let title = format!("Post {count}");
+            let (post, event) = post(&title, "This is my post.");
             if let Err(e) = insert_post(&pool, &post, &event).await {
-                eprintln!("Failed to insert post: {e}");
+                eprintln!("Failed to insert post {count}: {e}");
             }
         };
         let handle = tokio::spawn(task);
