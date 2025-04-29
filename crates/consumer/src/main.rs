@@ -31,9 +31,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .await?;
 
+    let semaphore = {
+        let max_parallel = std::thread::available_parallelism()?.get();
+        std::sync::Arc::new(tokio::sync::Semaphore::new(max_parallel))
+    };
+
     while let Some(message) = stream.try_next().await? {
         let amqp_channel = amqp_channel.clone();
-        let task = async move {
+        let semaphore = semaphore.clone();
+        let permit_fut = semaphore.acquire_owned();
+
+        tokio::spawn(async move {
+            let _permit = match permit_fut.await {
+                Ok(permit) => permit,
+                Err(_) => unreachable!("Semaphore should not be closed during normal operation"),
+            };
+
             process_message(amqp_channel.clone(), message, async move |event| {
                 println!("Received event: {:?}", event);
                 tokio::time::sleep(tokio::time::Duration::from_secs(
@@ -43,9 +56,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 random_error(config.consumer_failure_rate)?;
                 Ok(())
             })
-            .await
-        };
-        tokio::spawn(task);
+            .await;
+        });
     }
 
     Ok(())
