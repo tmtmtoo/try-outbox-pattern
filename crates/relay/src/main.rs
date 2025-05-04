@@ -25,6 +25,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .await?
     };
 
+    process_outbox(&pg_pool, config.relay_query_limit, async |message| {
+        amqp_channel
+            .basic_publish(
+                "",
+                &message.topic,
+                lapin::options::BasicPublishOptions::default(),
+                message.payload.as_bytes(),
+                lapin::BasicProperties::default(),
+            )
+            .await
+            .map(|_| ())
+            .map_err(Into::into)
+    })
+    .await?;
+
     let pg_listener_stream = {
         let mut listener = sqlx::postgres::PgListener::connect_with(&pg_pool).await?;
         listener.listen("outbox_channel").await?;

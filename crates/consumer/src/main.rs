@@ -3,6 +3,7 @@ struct Config {
     amqp_url: String,
     consumer_duration_secs: u32,
     consumer_failure_rate: f64,
+    consumer_writing_message_path: String,
 }
 
 #[tokio::main]
@@ -10,6 +11,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     use futures_util::stream::TryStreamExt;
 
     let config = envy::from_env::<Config>()?;
+
+    let file = tokio::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(&config.consumer_writing_message_path)
+        .await
+        .map(tokio::sync::Mutex::new)
+        .map(std::sync::Arc::new)?;
 
     let amqp_channel = {
         let options = lapin::ConnectionProperties::default()
@@ -31,33 +41,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .await?;
 
-    let semaphore = {
-        let max_parallel = std::thread::available_parallelism()?.get();
-        std::sync::Arc::new(tokio::sync::Semaphore::new(max_parallel))
-    };
-
     while let Some(message) = stream.try_next().await? {
         let amqp_channel = amqp_channel.clone();
-        let semaphore = semaphore.clone();
-        let permit_fut = semaphore.acquire_owned();
+        let file = file.clone();
+        process_message(amqp_channel, message, async move |event| {
+            {
+                use tokio::io::AsyncWriteExt;
+                let mut file = file.lock().await;
+                let line = format!("{event:?}\n",);
+                file.write_all(line.as_bytes()).await?;
+            }
 
-        tokio::spawn(async move {
-            let _permit = match permit_fut.await {
-                Ok(permit) => permit,
-                Err(_) => unreachable!("Semaphore should not be closed during normal operation"),
-            };
-
-            process_message(amqp_channel.clone(), message, async move |event| {
-                println!("Received event: {:?}", event);
-                tokio::time::sleep(tokio::time::Duration::from_secs(
-                    config.consumer_duration_secs.into(),
-                ))
-                .await;
-                random_error(config.consumer_failure_rate)?;
-                Ok(())
-            })
+            tokio::time::sleep(tokio::time::Duration::from_secs(
+                config.consumer_duration_secs.into(),
+            ))
             .await;
-        });
+
+            random_error(config.consumer_failure_rate).map_err(Into::into)
+        })
+        .await;
     }
 
     Ok(())
