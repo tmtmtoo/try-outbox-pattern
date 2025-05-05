@@ -6,6 +6,7 @@ where
     last_emit: tokio::time::Instant,
     interval: tokio::time::Duration,
     buffer: Option<S::Item>,
+    wake_timer: Option<std::pin::Pin<Box<tokio::time::Sleep>>>,
 }
 
 impl<S> TimedSampler<S>
@@ -18,6 +19,7 @@ where
             last_emit: tokio::time::Instant::now(),
             interval,
             buffer: None,
+            wake_timer: None,
         }
     }
 }
@@ -40,32 +42,46 @@ where
                     let now = tokio::time::Instant::now();
                     if now.duration_since(this.last_emit) >= this.interval {
                         this.last_emit = now;
+                        this.buffer = None;
+                        this.wake_timer = None;
                         return std::task::Poll::Ready(Some(item));
                     } else {
                         this.buffer = Some(item);
+                        if this.wake_timer.is_none() {
+                            let remain = this
+                                .interval
+                                .saturating_sub(now.duration_since(this.last_emit));
+                            this.wake_timer = Some(Box::pin(tokio::time::sleep(remain)));
+                        }
                         continue;
                     }
                 }
                 std::task::Poll::Ready(None) => {
                     if let Some(item) = this.buffer.take() {
+                        this.wake_timer = None;
                         return std::task::Poll::Ready(Some(item));
                     } else {
                         return std::task::Poll::Ready(None);
                     }
                 }
-                std::task::Poll::Pending => match &this.buffer {
-                    Some(_) => {
-                        let now = tokio::time::Instant::now();
-                        if now.duration_since(this.last_emit) >= this.interval {
-                            this.last_emit = now;
+                std::task::Poll::Pending => match (&this.buffer, &mut this.wake_timer) {
+                    (Some(_), Some(wake_timer)) => match wake_timer.as_mut().poll(cx) {
+                        std::task::Poll::Ready(()) => {
+                            this.wake_timer = None;
+                            this.last_emit = tokio::time::Instant::now();
                             return std::task::Poll::Ready(this.buffer.take());
-                        } else {
+                        }
+                        std::task::Poll::Pending => {
                             return std::task::Poll::Pending;
                         }
-                    }
-                    None => {
+                    },
+                    (Some(_), None) => {
+                        let now = tokio::time::Instant::now();
+                        let deadline = now + (this.interval - now.duration_since(this.last_emit));
+                        this.wake_timer = Some(Box::pin(tokio::time::sleep_until(deadline)));
                         return std::task::Poll::Pending;
                     }
+                    _ => return std::task::Poll::Pending,
                 },
             }
         }
