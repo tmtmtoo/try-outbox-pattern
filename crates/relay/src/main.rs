@@ -137,7 +137,7 @@ async fn process_outbox(
             }
         };
 
-        println!("Handle {} messages.", messages.len());
+        println!("{:?}, Handle {} messages.", tokio::time::Instant::now(), messages.len());
 
         let mut processed_outbox_ids = Vec::with_capacity(messages.len());
 
@@ -146,8 +146,6 @@ async fn process_outbox(
                 processed_outbox_ids.push(message.id);
             }
         }
-
-        println!("Processed {} messages.", processed_outbox_ids.len());
 
         if !processed_outbox_ids.is_empty() {
             sqlx::query!(
